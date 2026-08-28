@@ -14,6 +14,7 @@ const app = createApp(database);
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
+  console.log(`API Docs: http://${HOST}:${PORT}/docs`);
 });
 
 function shutdown(signal: string) {

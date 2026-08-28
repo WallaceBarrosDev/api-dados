@@ -2,10 +2,12 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import swaggerUi from "swagger-ui-express";
 import { Database } from "bun:sqlite";
 import { errorHandler, notFoundHandler, AppError } from "./middleware/error";
 import { logger } from "./middleware/logger";
 import { validateTime, validateDate, validateId, validatePagination } from "./middleware/validate";
+import { swaggerSpec } from "./swagger";
 
 export function createApp(db: Database) {
   const app = express();
@@ -16,7 +18,7 @@ export function createApp(db: Database) {
   app.use(logger);
 
   const limiter = rateLimit({
-    windowMs: 5 * 60 * 1000,
+    windowMs: 30 * 1000,
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
@@ -24,10 +26,46 @@ export function createApp(db: Database) {
   });
   app.use(limiter);
 
+  /**
+   * @swagger
+   * /status:
+   *   get:
+   *     tags: [Status]
+   *     summary: Verifica status do servidor
+   *     responses:
+   *       200:
+   *         description: Servidor funcionando
+   */
   app.get("/status", (_: Request, res: Response) => {
     res.json({ statusServer: "ok" });
   });
 
+  /**
+   * @swagger
+   * /materias:
+   *   get:
+   *     tags: [Matérias]
+   *     summary: Lista todas as matérias
+   *     parameters:
+   *       - in: query
+   *         name: search
+   *         schema:
+   *           type: string
+   *         description: Buscar por nome
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *         description: Página atual
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *         description: Itens por página
+   *     responses:
+   *       200:
+   *         description: Lista paginada de matérias
+   */
   app.get("/materias", (req: Request, res: Response) => {
     const { search } = req.query;
     const { page, limit, offset } = validatePagination(req.query as Record<string, unknown>);
@@ -49,6 +87,24 @@ export function createApp(db: Database) {
     res.json({ data, total, page, limit });
   });
 
+  /**
+   * @swagger
+   * /materias/{id}:
+   *   get:
+   *     tags: [Matérias]
+   *     summary: Busca matéria por ID
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Matéria encontrada
+   *       404:
+   *         description: Matéria não encontrada
+   */
   app.get("/materias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const subject = db.query("SELECT * FROM SUBJECT WHERE id = ?").get(id);
@@ -59,6 +115,28 @@ export function createApp(db: Database) {
     res.json(subject);
   });
 
+  /**
+   * @swagger
+   * /materias:
+   *   post:
+   *     tags: [Matérias]
+   *     summary: Cria uma nova matéria
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name]
+   *             properties:
+   *               name:
+   *                 type: string
+   *     responses:
+   *       201:
+   *         description: Matéria criada
+   *       400:
+   *         description: Campo obrigatório faltando
+   */
   app.post("/materias", (req: Request, res: Response) => {
     const { name } = req.body;
 
@@ -70,6 +148,34 @@ export function createApp(db: Database) {
     res.status(201).json({ id: result.lastInsertRowid, name: name.trim() });
   });
 
+  /**
+   * @swagger
+   * /materias/{id}:
+   *   put:
+   *     tags: [Matérias]
+   *     summary: Atualiza uma matéria
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name]
+   *             properties:
+   *               name:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Matéria atualizada
+   *       404:
+   *         description: Matéria não encontrada
+   */
   app.put("/materias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const { name } = req.body;
@@ -87,6 +193,26 @@ export function createApp(db: Database) {
     res.json({ id, name: name.trim() });
   });
 
+  /**
+   * @swagger
+   * /materias/{id}:
+   *   delete:
+   *     tags: [Matérias]
+   *     summary: Deleta uma matéria
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Matéria deletada
+   *       400:
+   *         description: Matéria tem aulas vinculadas
+   *       404:
+   *         description: Matéria não encontrada
+   */
   app.delete("/materias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
 
@@ -104,11 +230,43 @@ export function createApp(db: Database) {
     res.json({ message: "Matéria deletada com sucesso" });
   });
 
+  /**
+   * @swagger
+   * /dias:
+   *   get:
+   *     tags: [Dias da Semana]
+   *     summary: Lista todos os dias da semana
+   *     responses:
+   *       200:
+   *         description: Lista de dias
+   */
   app.get("/dias", (_: Request, res: Response) => {
     const weekdays = db.query("SELECT * FROM WEEKDAY").all();
     res.json(weekdays);
   });
 
+  /**
+   * @swagger
+   * /dias:
+   *   post:
+   *     tags: [Dias da Semana]
+   *     summary: Cria um novo dia
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name]
+   *             properties:
+   *               name:
+   *                 type: string
+   *     responses:
+   *       201:
+   *         description: Dia criado
+   *       400:
+   *         description: Campo obrigatório faltando
+   */
   app.post("/dias", (req: Request, res: Response) => {
     const { name } = req.body;
 
@@ -120,6 +278,26 @@ export function createApp(db: Database) {
     res.status(201).json({ id: result.lastInsertRowid, name: name.trim() });
   });
 
+  /**
+   * @swagger
+   * /dias/{id}:
+   *   delete:
+   *     tags: [Dias da Semana]
+   *     summary: Deleta um dia
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Dia deletado
+   *       400:
+   *         description: Dia tem aulas vinculadas
+   *       404:
+   *         description: Dia não encontrado
+   */
   app.delete("/dias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
 
@@ -137,6 +315,35 @@ export function createApp(db: Database) {
     res.json({ message: "Dia deletado com sucesso" });
   });
 
+  /**
+   * @swagger
+   * /cronograma:
+   *   get:
+   *     tags: [Cronograma]
+   *     summary: Lista todas as aulas
+   *     parameters:
+   *       - in: query
+   *         name: weekday_id
+   *         schema:
+   *           type: integer
+   *         description: Filtrar por dia da semana
+   *       - in: query
+   *         name: subject_id
+   *         schema:
+   *           type: integer
+   *         description: Filtrar por matéria
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Lista paginada de aulas
+   */
   app.get("/cronograma", (req: Request, res: Response) => {
     const { weekday_id, subject_id } = req.query;
     const { page, limit, offset } = validatePagination(req.query as Record<string, unknown>);
@@ -173,6 +380,24 @@ export function createApp(db: Database) {
     res.json({ data, total, page, limit });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{id}:
+   *   get:
+   *     tags: [Cronograma]
+   *     summary: Busca aula por ID
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Aula encontrada
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.get("/cronograma/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
 
@@ -191,6 +416,36 @@ export function createApp(db: Database) {
     res.json(lesson);
   });
 
+  /**
+   * @swagger
+   * /cronograma:
+   *   post:
+   *     tags: [Cronograma]
+   *     summary: Cria uma nova aula
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [subject_id, weekday_id, start_time, end_time]
+   *             properties:
+   *               subject_id:
+   *                 type: integer
+   *               weekday_id:
+   *                 type: integer
+   *               start_time:
+   *                 type: string
+   *                 example: "08:00"
+   *               end_time:
+   *                 type: string
+   *                 example: "09:00"
+   *     responses:
+   *       201:
+   *         description: Aula criada
+   *       400:
+   *         description: Campos obrigatórios faltando ou inválidos
+   */
   app.post("/cronograma", (req: Request, res: Response) => {
     const { subject_id, weekday_id, start_time, end_time } = req.body;
 
@@ -218,6 +473,40 @@ export function createApp(db: Database) {
     res.status(201).json({ id: result.lastInsertRowid, subject_id, weekday_id, start_time, end_time });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{id}:
+   *   put:
+   *     tags: [Cronograma]
+   *     summary: Atualiza uma aula
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [subject_id, weekday_id, start_time, end_time]
+   *             properties:
+   *               subject_id:
+   *                 type: integer
+   *               weekday_id:
+   *                 type: integer
+   *               start_time:
+   *                 type: string
+   *               end_time:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: Aula atualizada
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.put("/cronograma/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const { subject_id, weekday_id, start_time, end_time } = req.body;
@@ -251,6 +540,24 @@ export function createApp(db: Database) {
     res.json({ id, subject_id, weekday_id, start_time, end_time });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{id}:
+   *   delete:
+   *     tags: [Cronograma]
+   *     summary: Deleta uma aula
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Aula deletada
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.delete("/cronograma/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
 
@@ -265,6 +572,38 @@ export function createApp(db: Database) {
     res.json({ message: "Aula deletada com sucesso" });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{id}/gerar-ocorrencias:
+   *   post:
+   *     tags: [Cronograma]
+   *     summary: Gera ocorrências automáticas para um período
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [start_date, end_date]
+   *             properties:
+   *               start_date:
+   *                 type: string
+   *                 example: "2025-01-06"
+   *               end_date:
+   *                 type: string
+   *                 example: "2025-06-30"
+   *     responses:
+   *       201:
+   *         description: Ocorrências criadas
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.post("/cronograma/:id/gerar-ocorrencias", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const { start_date, end_date } = req.body;
@@ -319,6 +658,44 @@ export function createApp(db: Database) {
     res.status(201).json({ message: `${created} ocorrência(s) criada(s)`, created });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{lessonId}/ocorrencias:
+   *   get:
+   *     tags: [Ocorrências]
+   *     summary: Lista ocorrências de uma aula
+   *     parameters:
+   *       - in: path
+   *         name: lessonId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: completed
+   *         schema:
+   *           type: boolean
+   *       - in: query
+   *         name: from
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: to
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Lista paginada de ocorrências
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.get("/cronograma/:lessonId/ocorrencias", (req: Request, res: Response) => {
     const lessonId = validateId(req.params.lessonId, "lessonId");
     const { completed, from, to } = req.query;
@@ -358,6 +735,29 @@ export function createApp(db: Database) {
     res.json({ data, total, page, limit });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{lessonId}/ocorrencias/{id}:
+   *   get:
+   *     tags: [Ocorrências]
+   *     summary: Busca ocorrência por ID
+   *     parameters:
+   *       - in: path
+   *         name: lessonId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Ocorrência encontrada
+   *       404:
+   *         description: Ocorrência não encontrada
+   */
   app.get("/cronograma/:lessonId/ocorrencias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const lessonId = validateId(req.params.lessonId, "lessonId");
@@ -373,6 +773,39 @@ export function createApp(db: Database) {
     res.json(occurrence);
   });
 
+  /**
+   * @swagger
+   * /cronograma/{lessonId}/ocorrencias:
+   *   post:
+   *     tags: [Ocorrências]
+   *     summary: Cria uma ocorrência
+   *     parameters:
+   *       - in: path
+   *         name: lessonId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [date]
+   *             properties:
+   *               date:
+   *                 type: string
+   *                 example: "2025-01-15"
+   *               completed:
+   *                 type: boolean
+   *     responses:
+   *       201:
+   *         description: Ocorrência criada
+   *       400:
+   *         description: Campo obrigatório faltando
+   *       404:
+   *         description: Aula não encontrada
+   */
   app.post("/cronograma/:lessonId/ocorrencias", (req: Request, res: Response) => {
     const lessonId = validateId(req.params.lessonId, "lessonId");
     const { date, completed } = req.body;
@@ -395,6 +828,40 @@ export function createApp(db: Database) {
     res.status(201).json({ id: result.lastInsertRowid, lesson_id: lessonId, date, completed: completed ? true : false });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{lessonId}/ocorrencias/{id}:
+   *   put:
+   *     tags: [Ocorrências]
+   *     summary: Atualiza uma ocorrência
+   *     parameters:
+   *       - in: path
+   *         name: lessonId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               date:
+   *                 type: string
+   *               completed:
+   *                 type: boolean
+   *     responses:
+   *       200:
+   *         description: Ocorrência atualizada
+   *       404:
+   *         description: Ocorrência não encontrada
+   */
   app.put("/cronograma/:lessonId/ocorrencias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const lessonId = validateId(req.params.lessonId, "lessonId");
@@ -430,6 +897,29 @@ export function createApp(db: Database) {
     res.json({ id, lesson_id: lessonId, date: newDate, completed: newCompleted ? true : false });
   });
 
+  /**
+   * @swagger
+   * /cronograma/{lessonId}/ocorrencias/{id}:
+   *   delete:
+   *     tags: [Ocorrências]
+   *     summary: Deleta uma ocorrência
+   *     parameters:
+   *       - in: path
+   *         name: lessonId
+   *         required: true
+   *         schema:
+   *           type: integer
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Ocorrência deletada
+   *       404:
+   *         description: Ocorrência não encontrada
+   */
   app.delete("/cronograma/:lessonId/ocorrencias/:id", (req: Request, res: Response) => {
     const id = validateId(req.params.id, "id");
     const lessonId = validateId(req.params.lessonId, "lessonId");
@@ -447,6 +937,16 @@ export function createApp(db: Database) {
     res.json({ message: "Ocorrência deletada com sucesso" });
   });
 
+  /**
+   * @swagger
+   * /dashboard:
+   *   get:
+   *     tags: [Dashboard]
+   *     summary: Resumo geral do sistema
+   *     responses:
+   *       200:
+   *         description: Estatísticas gerais
+   */
   app.get("/dashboard", (_: Request, res: Response) => {
     const subjects = db.query("SELECT COUNT(*) as total FROM SUBJECT").get() as { total: number };
     const lessons = db.query("SELECT COUNT(*) as total FROM LESSON").get() as { total: number };
@@ -462,6 +962,16 @@ export function createApp(db: Database) {
     });
   });
 
+  /**
+   * @swagger
+   * /dashboard/semanal:
+   *   get:
+   *     tags: [Dashboard]
+   *     summary: Aulas da semana atual
+   *     responses:
+   *       200:
+   *         description: Aulas da semana
+   */
   app.get("/dashboard/semanal", (req: Request, res: Response) => {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -488,6 +998,16 @@ export function createApp(db: Database) {
     res.json({ startDate, endDate, data });
   });
 
+  /**
+   * @swagger
+   * /dashboard/estatisticas:
+   *   get:
+   *     tags: [Dashboard]
+   *     summary: Estatísticas por matéria
+   *     responses:
+   *       200:
+   *         description: Estatísticas detalhadas
+   */
   app.get("/dashboard/estatisticas", (_: Request, res: Response) => {
     const bySubject = db.query(`
       SELECT s.name, COUNT(l.id) as total_lessons,
@@ -499,6 +1019,12 @@ export function createApp(db: Database) {
     `).all();
 
     res.json({ bySubject });
+  });
+
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+  app.get("/swagger.json", (_, res) => {
+    res.json(swaggerSpec);
   });
 
   app.use(notFoundHandler);
