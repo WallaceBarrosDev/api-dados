@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS LESSON (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL,
+    weekday_id INTEGER NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    FOREIGN KEY (subject_id) REFERENCES SUBJECT(id),
+    FOREIGN KEY (weekday_id) REFERENCES WEEKDAY(id)
+);
