@@ -12,7 +12,16 @@ import { swaggerSpec } from "./swagger";
 export function createApp(db: Database) {
   const app = express();
 
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      }
+    }
+  }));
   app.use(cors({ origin: process.env.CORS_ORIGIN }));
   app.use(express.json({ limit: "1mb" }));
   app.use(logger);
